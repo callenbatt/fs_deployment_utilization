@@ -5,19 +5,28 @@ function fetchStoryAllocationDays() {
 var StoryAllocationDays = function() {
     this.row = 2;
     this.userIds = this.getUserIds();
-    this.url = this.setRequestUrl();
+    this.date = new Date();
+    this.isoStartDate = new Date(this.date.getTime() - (this.date.getTimezoneOffset() * 60000 )).toISOString().split("T")[0];
+    this.msStartDate = new Date(this.isoStartDate).getTime();
+    this.url = this.setRequestUrl(this.isoStartDate);
+
+
+    this.sheet = SpreadsheetApp.openById(SSID).getSheetByName('story_allocation_days');
+
+    //delete all data from sheet
+    this.sheet.deleteRows(2, (this.sheet.getLastRow() - 1));
 
     //fetch the first set of allocation data
     this.fetchInit = JSON.parse(UrlFetchApp.fetch((this.url + 'page=1'), GET_OPTIONS));
     this.pages = Math.ceil(this.fetchInit.count / 200);
 
     //process initial fetch
-    this.processResponse(this.fetchInit, this.userIds, this.row);
+    this.processResponse(this.fetchInit, this.sheet, this.userIds, this.row, this.msStartDate);
 
     //process subsequent fetchs
     for (var i = 2; i <= this.pages; i++) {
         var response = JSON.parse(UrlFetchApp.fetch((this.url + 'page=' + i), GET_OPTIONS));
-        this.processResponse(response, this.userIds, this.row);
+        this.processResponse(response, this.sheet, this.userIds, this.row, this.msStartDate);
     }
     
 }
@@ -38,12 +47,11 @@ StoryAllocationDays.prototype.getUserIds = function() {
 
 /**
  * Set the request url for the Mavenlink Data
+ * @param {ISO Date} isoStartDate ISO date of run time
  * @returns {String} of the url to request
  */
-StoryAllocationDays.prototype.setRequestUrl = function() {
+StoryAllocationDays.prototype.setRequestUrl = function(isoStartDate) {
     var endpoint = 'https://api.mavenlink.com/api/v1/story_allocation_days';
-    var date = new Date();
-    var isoStartDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000 )).toISOString().split("T")[0];
     var yearStart = isoStartDate.substr(0,4);
     var yearEnd = (parseInt(yearStart) + 1).toString();
     var isoEndDate = isoStartDate.replace(yearStart, yearEnd);
@@ -61,9 +69,21 @@ StoryAllocationDays.prototype.setRequestUrl = function() {
     return endpoint + paramString;
 }
 
-StoryAllocationDays.prototype.processResponse = function(response, userIds, row) {
+
+/**
+ * Convert the JSON data in the response to an array
+ * and write it to the designated Google Sheet
+ * @param {Object} response story_allocation_days JSON data
+ * @param {SheetRef} sheet reference to the Google Sheet
+ * @param {Array} userIds  ids of users to check
+ * @param {Integer} row row to write to in Google Sheet
+ * @param {ISO Date} msStartDate date in ms of run time
+ */
+StoryAllocationDays.prototype.processResponse = function(response, sheet, userIds, row, msStartDate) {
     var output = [];
     var responseCount = response.results.length;
+    var dateRef;
+    var weekRef = 0;
     for (var i = 0; i < responseCount; i++) {
         var refId = response.results[i].id;
         var allocation = response.story_allocation_days[refId];
@@ -74,16 +94,22 @@ StoryAllocationDays.prototype.processResponse = function(response, userIds, row)
             for (var j = 0; j < allocationKeys.length; j++) {
                 allocationItems.push(allocation[allocationKeys[j]])
             }
-            allocationItems.push(assigneeId);
+
+            if (allocation.date !== dateRef) {
+                dateRef = allocation.date;
+                weekRef = Math.floor(((new Date(allocation.date).getTime()) - msStartDate)/1000/60/60/24/7);
+            }
+
+            allocationItems.push(assigneeId, weekRef);
             output.push(allocationItems);
         }
     }
 
+    //insert the necessary number of rows
+    sheet.insertRows(row, output.length);
+
     //write the formatted output to the Google Sheet
-    SpreadsheetApp.openById(SSID)
-        .getSheetByName('story_allocation_days')
-        .getRange(row, 1, output.length, output[0].length)
-        .setValues(output);
+    sheet.getRange(row, 1, output.length, output[0].length).setValues(output);
 
     //Set the scoped row variable to pick up where the last loop left off
     this.row = row + output.length;
