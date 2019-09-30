@@ -9,15 +9,19 @@ var StoryAllocationDays = function() {
     this.isoStartDate = new Date(this.date.getTime() - (this.date.getTimezoneOffset() * 60000 )).toISOString().split("T")[0];
     this.msStartDate = new Date(this.isoStartDate).getTime();
     this.url = this.setRequestUrl(this.isoStartDate);
+    this.options = {
+        'headers' : {
+            'Authorization' : 'Bearer ' +API_TOKEN
+        }
+    };
 
-
-    this.sheet = SpreadsheetApp.openById(SSID).getSheetByName('story_allocation_days');
+    this.sheet = SpreadsheetApp.openById(SSID).getSheetByName(SHEET_NAME_STORY_ALLOCATION_DAYS);
 
     //delete all data from sheet
     this.sheet.deleteRows(2, (this.sheet.getLastRow() - 1));
 
     //fetch the first set of allocation data
-    this.fetchInit = JSON.parse(UrlFetchApp.fetch((this.url + 'page=1'), GET_OPTIONS));
+    this.fetchInit = JSON.parse(UrlFetchApp.fetch((this.url + 'page=1'), this.options));
     this.pages = Math.ceil(this.fetchInit.count / 200);
 
     //process initial fetch
@@ -25,7 +29,7 @@ var StoryAllocationDays = function() {
 
     //process subsequent fetchs
     for (var i = 2; i <= this.pages; i++) {
-        var response = JSON.parse(UrlFetchApp.fetch((this.url + 'page=' + i), GET_OPTIONS));
+        var response = JSON.parse(UrlFetchApp.fetch((this.url + 'page=' + i), this.options));
         this.processResponse(response, this.sheet, this.userIds, this.row, this.msStartDate);
     }
     
@@ -36,7 +40,7 @@ var StoryAllocationDays = function() {
  * @returns {Array} user ids
  */
 StoryAllocationDays.prototype.getUserIds = function() {
-    var values = SpreadsheetApp.openById(SSID).getSheetByName('users').getDataRange().getValues();
+    var values = SpreadsheetApp.openById(SSID).getSheetByName(SHEET_NAME_USERS).getDataRange().getValues();
     var keys = values.splice(0, 1)[0];
     var userIds = [];
     for (var i = 0; i < values.length; i++) {
