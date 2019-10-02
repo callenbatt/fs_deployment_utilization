@@ -12,11 +12,11 @@ var SalesforceProjections = function() {
     this.values_timesheet = this.SS.getSheetByName(SHEET_NAME_TIMESHEET).getDataRange().getValues();
     this.times = this.setTimes(this.values_timesheet);
 
-    Logger.log(JSON.stringify(this.times));
-
     this.contracts = this.getContracts(this.values_salesforce, this.dateStart);
 
-    // this.SS.getSheetByName('Sheet8').getRange(1, 1, this.contracts.length, this.contracts[0].length).setValues(this.contracts);
+    this.writeOut = this.setWriteOut(this.times, this.contracts, this.weeks);
+
+    this.SS.getSheetByName('merged_data').getRange(2, 1, this.writeOut.length, this.writeOut[0].length).setValues(this.writeOut);
 
     
 }
@@ -33,7 +33,7 @@ SalesforceProjections.prototype.setWeeks = function (dateStart) {
 
     for (var i = 0; i < 52; i++) {
         var week = new Date(time + (i * (7*24*60*60*1000)));
-        weeks[i] = week.toLocaleString().split(',')[0];
+        weeks[i] = week.toISOString().split("T")[0];
     }
 
     return weeks;
@@ -77,7 +77,7 @@ SalesforceProjections.prototype.getContracts = function(values, dateStart) {
     var keys = values.splice(0, 1)[0];
 
     // set index on specific columns
-    var probablityIndex = keys.indexOf('Probability (%)');
+    var probabilityIndex = keys.indexOf('Probability (%)');
     var package1Index   = keys.indexOf('Creative Services Package');
     var package2Index   = keys.indexOf('Creative Service Package V2');
     var closeDateIndex  = keys.indexOf('"Close Date"');
@@ -91,7 +91,7 @@ SalesforceProjections.prototype.getContracts = function(values, dateStart) {
 
     for (var i = 0; i < values.length; i++) {
         var value = values[i];
-        var probability = value[probablityIndex];
+        var probability = value[probabilityIndex];
 
         // the values is measured if the probability is between 1 and .6
         var isMeasured = 1 > probability && probability >= .6 ;
@@ -124,8 +124,47 @@ SalesforceProjections.prototype.getContracts = function(values, dateStart) {
             }
 
             // push data to the contracts array    
-            contracts.push([weekRef, cmsPackage, probability]);
+            contracts.push({
+                "weekRef" : weekRef, 
+                "cmsPackage" : cmsPackage, 
+                "probability" : probability
+            });
         }
     }
     return contracts;
+}
+
+SalesforceProjections.prototype.setWriteOut = function(times, contracts, weeks) {
+    var writeOut = [];
+    var timesheet_max = 32;
+    for (var i = 0; i < contracts.length; i++) {
+        for (var j = 0; j < timesheet_max; j++) {
+            if (contracts[i].weekRef + j > weeks.length) {
+                break;
+            }
+            var hours_pm   = times[contracts[i].cmsPackage]['pm'][j];
+            var hours_fed  = times[contracts[i].cmsPackage]['fed'][j];
+            var hours_des  = times[contracts[i].cmsPackage]['des'][j];
+            var hours_dept = hours_pm + hours_fed + hours_des;
+            var date = weeks[contracts[i].weekRef + j]
+
+            if (hours_pm > 0) {
+                writeOut.push([date,  'pm', hours_pm, contracts[i].probability]);
+            }
+
+            if (hours_fed > 0) {
+                writeOut.push([date, 'fed', hours_fed, contracts[i].probability]);
+            }
+
+            if (hours_des > 0) {
+                writeOut.push([date, 'des', hours_des, contracts[i].probability]);
+            }
+
+            if (hours_dept > 0) {
+                writeOut.push([date, 'dept', hours_dept, contracts[i].probability]);
+            }
+        }
+    }
+
+    return writeOut;
 }
