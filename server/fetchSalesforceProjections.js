@@ -3,22 +3,28 @@ function fetchSalesforceProjections() {
 }
 
 var SalesforceProjections = function() {
-    this.dateStart = new Date(new Date().setHours(0,0,0,0));
+    this.dateStart = new Date('2019-09-30');
     this.weeks = this.setWeeks(this.dateStart);
     
     this.SS = SpreadsheetApp.openById(SSID);
     this.values_salesforce = this.SS.getSheetByName(SHEET_NAME_DELIVERY_RESOURCE_FORECAST).getDataRange().getValues();
-
+    this.values_users = this.SS.getSheetByName(SHEET_NAME_USERS).getDataRange().getValues();
+    this.values_mavenlink = this.SS.getSheetByName(SHEET_NAME_STORY_ALLOCATION_DAYS).getDataRange().getValues();
     this.values_timesheet = this.SS.getSheetByName(SHEET_NAME_TIMESHEET).getDataRange().getValues();
+
     this.times = this.setTimes(this.values_timesheet);
+    this.timeEntries_salesforce = this.getTimeEntries_salesforce(this.values_salesforce, this.dateStart);
 
-    this.contracts = this.getContracts(this.values_salesforce, this.dateStart);
+    this.writeOut_mavenlink = this.setWriteOut_mavenlink(this.weeks, this.values_mavenlink, this.values_users);
+    this.writeOut_salesforce = this.setWriteOut_salesforce(this.times, this.timeEntries_salesforce, this.weeks);
 
-    this.writeOut = this.setWriteOut(this.times, this.contracts, this.weeks);
+    this.mergeSheet = this.SS.getSheetByName(SHEET_NAME_MERGED_DATA);
 
-    this.SS.getSheetByName('merged_data').getRange(2, 1, this.writeOut.length, this.writeOut[0].length).setValues(this.writeOut);
-
-    
+    this.mergeSheet.deleteRows(2, (this.mergeSheet.getLastRow() - 1));
+    this.mergeSheet.insertRows(2, this.writeOut_salesforce.length);
+    this.mergeSheet.getRange(2, 1, this.writeOut_salesforce.length, this.writeOut_salesforce[0].length).setValues(this.writeOut_salesforce);
+    this.mergeSheet.insertRows(2, this.writeOut_mavenlink.length);
+    this.mergeSheet.getRange(2, 1, this.writeOut_mavenlink.length, this.writeOut_mavenlink[0].length).setValues(this.writeOut_mavenlink);
 }
 
 /**
@@ -48,7 +54,6 @@ SalesforceProjections.prototype.setTimes = function(timesheet_values) {
 
     var projectIndex = keys.indexOf('project_type');
     var roleIndex    = keys.indexOf('role');
-    var totalIndex   = keys.indexOf('total');
     var zeroIndex    = keys.indexOf(0);
 
     for (var i = 0; i < timesheet_values.length; i++) {
@@ -70,24 +75,24 @@ SalesforceProjections.prototype.setTimes = function(timesheet_values) {
  * Get data from Salesforce Projections sheet
  * extract package and close date
  * sort by probability
- * @returns {Object} contracts data
+ * @returns {Object} timeEntries data
  */
-SalesforceProjections.prototype.getContracts = function(values, dateStart) {
+SalesforceProjections.prototype.getTimeEntries_salesforce = function(values, dateStart) {
     // extract headers
     var keys = values.splice(0, 1)[0];
 
     // set index on specific columns
     var probabilityIndex = keys.indexOf('Probability (%)');
-    var package1Index   = keys.indexOf('Creative Services Package');
-    var package2Index   = keys.indexOf('Creative Service Package V2');
-    var closeDateIndex  = keys.indexOf('"Close Date"');
+    var package1Index    = keys.indexOf('Creative Services Package');
+    var package2Index    = keys.indexOf('Creative Service Package V2');
+    var closeDateIndex   = keys.indexOf('"Close Date"');
 
     // global references for repeated lookups
     var dateRef;
     var weekRef = 0;
 
     // returned object of contract data sorted by probability
-    var contracts = [];
+    var timeEntries = [];
 
     for (var i = 0; i < values.length; i++) {
         var value = values[i];
@@ -123,45 +128,75 @@ SalesforceProjections.prototype.getContracts = function(values, dateStart) {
                 case "Public School Custom":        cmsPackage = "Public School Package 3";     break;
             }
 
-            // push data to the contracts array    
-            contracts.push({
+            // push data to the timeEntries array    
+            timeEntries.push({
                 "weekRef" : weekRef, 
                 "cmsPackage" : cmsPackage, 
                 "probability" : probability
             });
         }
     }
-    return contracts;
+    return timeEntries;
 }
 
-SalesforceProjections.prototype.setWriteOut = function(times, contracts, weeks) {
+SalesforceProjections.prototype.setWriteOut_mavenlink = function(weeks, values_mavenlink, values_users) {
+    var writeOut = [];    
+    // extract headers
+    var keys_mavenlink = values_mavenlink.splice(0, 1)[0];
+    var keys_users = values_users.splice(0, 1)[0];
+
+    // set index on specific columns
+    var assigneeIndex  = keys_mavenlink.indexOf('assignee_id');
+    var weekIndex      = keys_mavenlink.indexOf('week');
+    var minutesIndex   = keys_mavenlink.indexOf('minutes');
+    var userIdIndex    = keys_users.indexOf('id');
+    var roleIndex      = keys_users.indexOf('role');
+
+    var users = {};
+    for (var i = 0; i < values_users.length; i++) {
+        users[values_users[i][userIdIndex]] = values_users[i][roleIndex];
+    }
+
+    for (var i = 0; i < values_mavenlink.length; i++) {
+        var date  = weeks[values_mavenlink[i][weekIndex]];
+        var role  = users[values_mavenlink[i][assigneeIndex]];
+        var hours = (values_mavenlink[i][minutesIndex])/60;
+        var prob  = 1;
+        writeOut.push([date, role, hours, prob]);
+        writeOut.push([date, 'dept', hours, prob]);
+    }
+
+    return writeOut;
+}
+
+SalesforceProjections.prototype.setWriteOut_salesforce = function(times, timeEntries, weeks) {
     var writeOut = [];
-    var timesheet_max = 32;
-    for (var i = 0; i < contracts.length; i++) {
+    var timesheet_max = 31;
+    for (var i = 0; i < timeEntries.length; i++) {
         for (var j = 0; j < timesheet_max; j++) {
-            if (contracts[i].weekRef + j > weeks.length) {
+            if (timeEntries[i].weekRef + j > weeks.length) {
                 break;
             }
-            var hours_pm   = times[contracts[i].cmsPackage]['pm'][j];
-            var hours_fed  = times[contracts[i].cmsPackage]['fed'][j];
-            var hours_des  = times[contracts[i].cmsPackage]['des'][j];
+            var hours_pm   = times[timeEntries[i].cmsPackage]['pm'][j];
+            var hours_fed  = times[timeEntries[i].cmsPackage]['fed'][j];
+            var hours_des  = times[timeEntries[i].cmsPackage]['des'][j];
             var hours_dept = hours_pm + hours_fed + hours_des;
-            var date = weeks[contracts[i].weekRef + j]
+            var date = weeks[timeEntries[i].weekRef + j]
 
             if (hours_pm > 0) {
-                writeOut.push([date,  'pm', hours_pm, contracts[i].probability]);
+                writeOut.push([date,  'pm', hours_pm, timeEntries[i].probability]);
             }
 
             if (hours_fed > 0) {
-                writeOut.push([date, 'fed', hours_fed, contracts[i].probability]);
+                writeOut.push([date, 'fed', hours_fed, timeEntries[i].probability]);
             }
 
             if (hours_des > 0) {
-                writeOut.push([date, 'des', hours_des, contracts[i].probability]);
+                writeOut.push([date, 'des', hours_des, timeEntries[i].probability]);
             }
 
             if (hours_dept > 0) {
-                writeOut.push([date, 'dept', hours_dept, contracts[i].probability]);
+                writeOut.push([date, 'dept', hours_dept, timeEntries[i].probability]);
             }
         }
     }

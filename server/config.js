@@ -12,3 +12,4 @@ var SHEET_NAME_STORY_ALLOCATION_DAYS = 'story_allocation_days';
 var SHEET_NAME_DELIVERY_RESOURCE_FORECAST = 'delivery_resource_forecast';
 var SHEET_NAME_USERS = 'users';
 var SHEET_NAME_TIMESHEET = 'timesheet';
+var SHEET_NAME_MERGED_DATA = 'merged_data';
