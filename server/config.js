@@ -14,3 +14,5 @@ var SHEET_NAME_USERS = 'users';
 var SHEET_NAME_MAP_HOURS = 'MAP_project_type_x_hours';
 var SHEET_NAME_MAP_LOCATION = 'MAP_account_region_x_pm_location';
 var SHEET_NAME_CHART_DATA = 'chart_data';
+
+var WEEKS_OUT = 26;

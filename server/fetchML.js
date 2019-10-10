@@ -3,20 +3,19 @@ function runFetchML() {
 }
 
 var FetchML = function() {
-
-    this.sheet_users = SpreadsheetApp.openById(SSID).getSheetByName(SHEET_NAME_USERS);
+    this.SS = SpreadsheetApp.openById(SSID);
+    this.sheet_users = this.SS.getSheetByName(SHEET_NAME_USERS);
     this.users = this.setUsers(this.sheet_users);
 
-    this.sheet_ml = SpreadsheetApp.openById(SSID).getSheetByName(SHEET_NAME_ML);
-    this.ROW = 2;
+    this.sheet_ml = this.SS.getSheetByName(SHEET_NAME_ML);
+    this.row = 2;
 
     //delete all data from sheet
     this.sheet_ml.deleteRows(2, (this.sheet_ml.getLastRow() - 1));
 
     this.date = new Date();
-    this.WEEKS_OUT = 26;
     this.isoStartDate = this.date.toISOString().split("T")[0];
-    this.isoEndDate = new Date(this.date.getTime() + (1000*60*60*24*7*this.WEEKS_OUT)).toISOString().split("T")[0];
+    this.isoEndDate = new Date(this.date.getTime() + (604800000 * WEEKS_OUT)).toISOString().split("T")[0];
     this.url = this.setRequestUrl(this.isoStartDate, this.isoEndDate);
     this.options = {
         'headers' : {
@@ -29,12 +28,12 @@ var FetchML = function() {
     this.pages = Math.ceil(this.fetchInit.count / 200);
 
     //process initial fetch
-    this.processResponse(this.fetchInit, this.sheet_ml, this.users, this.ROW);
+    this.row = this.processResponse(this.fetchInit, this.sheet_ml, this.users, this.row);
 
     //process subsequent fetchs
     for (var i = 2; i <= this.pages; i++) {
         var response = JSON.parse(UrlFetchApp.fetch((this.url + 'page=' + i), this.options));
-        this.processResponse(response, this.sheet_ml, this.users, this.ROW);
+        this.row = this.processResponse(response, this.sheet_ml, this.users, this.row);
     }
     
 }
@@ -95,11 +94,7 @@ FetchML.prototype.processResponse = function(response, sheet, users, row) {
         var assigneeId = response.assignments[allocation.assignment_id].assignee_id;
         var isValid = users[assigneeId] ? true : false;
         if (isValid) {
-            var allocationItems = [assigneeId];
-            var allocationKeys = Object.keys(allocation);
-            for (var j = 0; j < allocationKeys.length; j++) {
-                allocationItems.push(allocation[allocationKeys[j]])
-            }
+            var allocationItems = [assigneeId, allocation.minutes, allocation.date];
             output.push(allocationItems);
         }
     }
@@ -111,5 +106,5 @@ FetchML.prototype.processResponse = function(response, sheet, users, row) {
     sheet.getRange(row, 1, output.length, output[0].length).setValues(output);
 
     //Set the scoped row variable to pick up where the last loop left off
-    this.row = row + output.length;
+    return row + output.length;
 }
