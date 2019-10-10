@@ -1,63 +1,68 @@
-function fetchStoryAllocationDays() {
-    new StoryAllocationDays();
+function runFetchML() {
+    new FetchML();
 }
 
-var StoryAllocationDays = function() {
-    this.row = 2;
-    this.userIds = this.getUserIds();
+var FetchML = function() {
+
+    this.sheet_users = SpreadsheetApp.openById(SSID).getSheetByName(SHEET_NAME_USERS);
+    this.users = this.setUsers(this.sheet_users);
+
+    this.sheet_ml = SpreadsheetApp.openById(SSID).getSheetByName(SHEET_NAME_ML);
+    this.ROW = 2;
+
+    //delete all data from sheet
+    this.sheet_ml.deleteRows(2, (this.sheet_ml.getLastRow() - 1));
+
     this.date = new Date();
-    this.isoStartDate = new Date(this.date.getTime() - (this.date.getTimezoneOffset() * 60000 )).toISOString().split("T")[0];
-    this.msStartDate = new Date(this.isoStartDate).getTime();
-    this.url = this.setRequestUrl(this.isoStartDate, this.date);
+    this.WEEKS_OUT = 26;
+    this.isoStartDate = this.date.toISOString().split("T")[0];
+    this.isoEndDate = new Date(this.date.getTime() + (1000*60*60*24*7*this.WEEKS_OUT)).toISOString().split("T")[0];
+    this.url = this.setRequestUrl(this.isoStartDate, this.isoEndDate);
     this.options = {
         'headers' : {
             'Authorization' : 'Bearer ' +API_TOKEN
         }
     };
 
-    this.sheet = SpreadsheetApp.openById(SSID).getSheetByName(SHEET_NAME_ML);
-
-    //delete all data from sheet
-    this.sheet.deleteRows(2, (this.sheet.getLastRow() - 1));
-
     //fetch the first set of allocation data
     this.fetchInit = JSON.parse(UrlFetchApp.fetch((this.url + 'page=1'), this.options));
     this.pages = Math.ceil(this.fetchInit.count / 200);
 
     //process initial fetch
-    this.processResponse(this.fetchInit, this.sheet, this.userIds, this.row, this.msStartDate);
+    this.processResponse(this.fetchInit, this.sheet_ml, this.users, this.ROW);
 
     //process subsequent fetchs
     for (var i = 2; i <= this.pages; i++) {
         var response = JSON.parse(UrlFetchApp.fetch((this.url + 'page=' + i), this.options));
-        this.processResponse(response, this.sheet, this.userIds, this.row, this.msStartDate);
+        this.processResponse(response, this.sheet_ml, this.users, this.ROW);
     }
     
 }
 
 /**
  * Get the tracked users' ids from the 'user' sheet
- * @returns {Array} user ids
+ * @param {Sheet} sheet user sheet
+ * @returns {Object} users id : name
  */
-StoryAllocationDays.prototype.getUserIds = function() {
-    var values = SpreadsheetApp.openById(SSID).getSheetByName(SHEET_NAME_USERS).getDataRange().getValues();
+FetchML.prototype.setUsers = function(sheet) {
+    var users = {}
+    var values = sheet.getDataRange().getValues();
     var keys = values.splice(0, 1)[0];
-    var userIds = [];
+    var index_id = keys.indexOf('id');
     for (var i = 0; i < values.length; i++) {
-        userIds.push(values[i][keys.indexOf('id')]);
+        users[values[i][index_id]] = true;
     }
-    return userIds;
+    return users;
 }
 
 /**
  * Set the request url for the Mavenlink Data
  * @param {ISO Date} isoStartDate ISO date of run time
+ * @param {ISO Date} isoEndDate ISO date of run time
  * @returns {String} of the url to request
  */
-StoryAllocationDays.prototype.setRequestUrl = function(isoStartDate) {
+FetchML.prototype.setRequestUrl = function(isoStartDate, isoEndDate) {
     var endpoint = 'https://api.mavenlink.com/api/v1/story_allocation_days';
-
-    var isoEndDate = isoStartDate.replace(yearStart, yearEnd);
     var params = {
         'per_page' : '200',
         'order' : 'date:asc', 
@@ -80,30 +85,21 @@ StoryAllocationDays.prototype.setRequestUrl = function(isoStartDate) {
  * @param {SheetRef} sheet reference to the Google Sheet
  * @param {Array} userIds  ids of users to check
  * @param {Integer} row row to write to in Google Sheet
- * @param {Date} msStartDate date in ms of run time
  */
-StoryAllocationDays.prototype.processResponse = function(response, sheet, userIds, row, msStartDate) {
+FetchML.prototype.processResponse = function(response, sheet, users, row) {
     var output = [];
     var responseCount = response.results.length;
-    var dateRef;
-    var weekRef = 0;
     for (var i = 0; i < responseCount; i++) {
         var refId = response.results[i].id;
         var allocation = response.story_allocation_days[refId];
         var assigneeId = response.assignments[allocation.assignment_id].assignee_id;
-        if (userIds.indexOf(assigneeId) > -1) {
-            var allocationItems = [];
+        var isValid = users[assigneeId] ? true : false;
+        if (isValid) {
+            var allocationItems = [assigneeId];
             var allocationKeys = Object.keys(allocation);
             for (var j = 0; j < allocationKeys.length; j++) {
                 allocationItems.push(allocation[allocationKeys[j]])
             }
-
-            if (allocation.date !== dateRef) {
-                dateRef = allocation.date;
-                weekRef = Math.floor(((new Date(allocation.date).getTime()) - msStartDate)/1000/60/60/24/7);
-            }
-
-            allocationItems.push(assigneeId, weekRef);
             output.push(allocationItems);
         }
     }

@@ -7,10 +7,10 @@ var SalesforceProjections = function() {
     this.weeks = this.setWeeks(this.dateStart);
     
     this.SS = SpreadsheetApp.openById(SSID);
-    this.values_salesforce = this.SS.getSheetByName(SHEET_NAME_DELIVERY_RESOURCE_FORECAST).getDataRange().getValues();
+    this.values_salesforce = this.SS.getSheetByName(SHEET_NAME_SF).getDataRange().getValues();
     this.values_users = this.SS.getSheetByName(SHEET_NAME_USERS).getDataRange().getValues();
-    this.values_mavenlink = this.SS.getSheetByName(SHEET_NAME_STORY_ALLOCATION_DAYS).getDataRange().getValues();
-    this.values_timesheet = this.SS.getSheetByName(SHEET_NAME_TIMESHEET).getDataRange().getValues();
+    this.values_mavenlink = this.SS.getSheetByName(SHEET_NAME_ML).getDataRange().getValues();
+    this.values_timesheet = this.SS.getSheetByName(SHEET_NAME_MAP_HOURS).getDataRange().getValues();
 
     this.times = this.setTimes(this.values_timesheet);
     this.timeEntries_salesforce = this.getTimeEntries_salesforce(this.values_salesforce, this.dateStart);
@@ -18,7 +18,7 @@ var SalesforceProjections = function() {
     this.writeOut_mavenlink = this.setWriteOut_mavenlink(this.weeks, this.values_mavenlink, this.values_users);
     this.writeOut_salesforce = this.setWriteOut_salesforce(this.times, this.timeEntries_salesforce, this.weeks);
 
-    this.mergeSheet = this.SS.getSheetByName(SHEET_NAME_MERGED_DATA);
+    this.mergeSheet = this.SS.getSheetByName(SHEET_NAME_CHART_DATA);
 
     this.mergeSheet.deleteRows(2, (this.mergeSheet.getLastRow() - 1));
     this.mergeSheet.insertRows(2, this.writeOut_salesforce.length);

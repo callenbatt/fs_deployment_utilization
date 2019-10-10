@@ -8,8 +8,9 @@ var API_TOKEN = CONFIG.API_TOKEN
 var EMAIL_LABEL_PREPROCESSED = 'Deployment Reporting/preprocessed';
 var EMAIL_LABEL_POSTPROCESSED = 'Deployment Reporting/postprocessed';
 
-var SHEET_NAME_STORY_ALLOCATION_DAYS = 'story_allocation_days';
-var SHEET_NAME_DELIVERY_RESOURCE_FORECAST = 'delivery_resource_forecast';
+var SHEET_NAME_ML = 'story_allocation_days';
+var SHEET_NAME_SF = 'delivery_resource_forecast';
 var SHEET_NAME_USERS = 'users';
-var SHEET_NAME_TIMESHEET = 'timesheet';
-var SHEET_NAME_MERGED_DATA = 'merged_data';
+var SHEET_NAME_MAP_HOURS = 'MAP_project_type_x_hours';
+var SHEET_NAME_MAP_LOCATION = 'MAP_account_region_x_pm_location';
+var SHEET_NAME_CHART_DATA = 'chart_data';
