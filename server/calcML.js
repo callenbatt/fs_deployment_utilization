@@ -39,7 +39,7 @@ CalcML.prototype.setUsers = function(sheet) {
 CalcML.prototype.setWeeks = function (now) {
     var weeks = [];
 
-    for (var i = 0; i < 52; i++) {
+    for (var i = 0; i < WEEKS_OUT + 1; i++) {
         var week = new Date(now + (i * 604800000));
         weeks[i] = week.toISOString().split("T")[0];
     }
@@ -75,7 +75,7 @@ CalcML.prototype.setML = function(sheet, users, weeks, now) {
             }
         }
 
-        ml.push([weeks[ref_week], role, hours, 1, location]);
+        ml.push([weeks[ref_week], 1, role, location, hours]);
 
     }
     
